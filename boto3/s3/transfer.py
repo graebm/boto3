@@ -124,7 +124,9 @@ transfer.  For example:
 """
 from os import PathLike, fspath
 
+from botocore.compat import HAS_CRT
 from botocore.exceptions import ClientError
+from botocore.session import Session
 from s3transfer.exceptions import (
     RetriesExceededError as S3TransferRetriesExceededError,
 )
@@ -133,6 +135,10 @@ from s3transfer.manager import TransferConfig as S3TransferConfig
 from s3transfer.manager import TransferManager
 from s3transfer.subscribers import BaseSubscriber
 from s3transfer.utils import OSUtils
+
+from s3transfer.crt import (
+    create_s3_crt_client, BotocoreCRTRequestSerializer, CRTTransferManager
+)
 
 from boto3.exceptions import RetriesExceededError, S3UploadFailedError
 
@@ -155,6 +161,58 @@ def create_transfer_manager(client, config, osutil=None):
     :rtype: s3transfer.manager.TransferManager
     :returns: A transfer manager based on parameters provided
     """
+    if HAS_CRT:
+        print("HAS CRT")
+        return _create_crt_transfer_manager(client, config)
+    else:
+        return _create_default_transfer_manager(client, config) 
+
+
+def _create_crt_transfer_manager(client, config):
+    """Create a CRTTransferManager for optimized data transfer."""
+    sess = Session()
+    return CRTTransferManager(
+        _create_crt_client(client, config, sess),
+        _create_crt_request_serializer(client, config, sess)
+    )
+
+
+def _create_crt_client(client, config, session):
+    create_crt_client_kwargs = {
+        'region': client.meta.region_name,
+        'verify': False,
+        'use_ssl': True,
+    }
+    # TODO: We have no way to get the endpoint_url off a client
+    # endpoint_url = ???
+
+    target_throughput = config.max_bandwidth
+    multipart_chunksize = config.multipart_chunksize
+    if target_throughput:
+        create_crt_client_kwargs['target_throughput'] = target_throughput
+    if multipart_chunksize:
+        create_crt_client_kwargs['part_size'] = multipart_chunksize
+
+    # TODO: How do we do this properly?
+    cred_provider = session._components.get_component('credential_provider')
+    if cred_provider:
+        create_crt_client_kwargs['botocore_credential_provider'] = cred_provider
+
+    return create_s3_crt_client(**create_crt_client_kwargs)
+
+
+def _create_crt_request_serializer(client, config, session):
+    return BotocoreCRTRequestSerializer(
+        session,
+        {
+            'region_name': client.meta.region_name,
+            'endpoint_url': None, # TODO: We don't have a way to get an endpoint_url
+        }
+    )
+
+
+def _create_default_transfer_manager(client, config, osutil):
+    """Create the default TransferManager implementation for s3transfer."""
     executor_cls = None
     if not config.use_threads:
         executor_cls = NonThreadedExecutor
