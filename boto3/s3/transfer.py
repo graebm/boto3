@@ -136,11 +136,12 @@ from s3transfer.manager import TransferManager
 from s3transfer.subscribers import BaseSubscriber
 from s3transfer.utils import OSUtils
 
-from s3transfer.crt import (
-    create_s3_crt_client, BotocoreCRTRequestSerializer, CRTTransferManager
-)
-
 from boto3.exceptions import RetriesExceededError, S3UploadFailedError
+
+if HAS_CRT:
+    from s3transfer.crt import (
+        create_s3_crt_client, BotocoreCRTRequestSerializer, CRTTransferManager
+    )
 
 KB = 1024
 MB = KB * KB
@@ -162,10 +163,9 @@ def create_transfer_manager(client, config, osutil=None):
     :returns: A transfer manager based on parameters provided
     """
     if HAS_CRT:
-        print("HAS CRT")
         return _create_crt_transfer_manager(client, config)
     else:
-        return _create_default_transfer_manager(client, config) 
+        return _create_default_transfer_manager(client, config, osutil)
 
 
 def _create_crt_transfer_manager(client, config):
