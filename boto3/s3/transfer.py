@@ -169,11 +169,9 @@ def create_transfer_manager(client, config, osutil=None):
             _DEFAULT_CRT_CLIENT = initialize_crt_s3_transfer_manager(client, config)
             crt_transfer_manager = _DEFAULT_CRT_CLIENT
         if crt_transfer_manager is not None and client.meta.region_name == crt_transfer_manager._region:
-            print(f"SUCCESSFULLY AQUIRED CRT - {getpid()}")
             return crt_transfer_manager._crt_s3_client
 
     # If we don't resolve something above, fallback to the default.
-    print(f"USING DEFAULT TRANSFER - {getpid()}")
     return _create_default_transfer_manager(client, config, osutil)
 
 
