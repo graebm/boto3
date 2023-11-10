@@ -23,6 +23,9 @@ __version__ = '1.28.62'
 # The default Boto3 session; autoloaded when needed.
 DEFAULT_SESSION = None
 
+# The default CRT 
+_DEFAULT_CRT_CLIENT = None
+
 
 def setup_default_session(**kwargs):
     """
@@ -32,6 +35,10 @@ def setup_default_session(**kwargs):
     """
     global DEFAULT_SESSION
     DEFAULT_SESSION = Session(**kwargs)
+
+
+def _get_default_crt_client(**kwargs):
+    return _DEFAULT_CRT_CLIENT
 
 
 def set_stream_logger(name='boto3', level=logging.DEBUG, format_string=None):
