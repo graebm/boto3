@@ -1,5 +1,5 @@
 from awscrt.auth import AwsCredentials
-from awscrt.s3 import CrossProcessLock
+from awscrt.s3 import CrossProcessLock, get_recommended_throughput_target_gbps
 
 from s3transfer.crt import (
     create_s3_crt_client, BotocoreCRTRequestSerializer, CRTTransferManager
@@ -74,17 +74,10 @@ def _create_crt_client(session, config, region_name, cred_provider):
         'verify': False,
         'use_ssl': True,
     }
-    # TODO: We have no way to get the endpoint_url off a client
-    # endpoint_url = ???
 
-    target_throughput = config.max_bandwidth
-    multipart_chunksize = config.multipart_chunksize
-    if target_throughput:
-        create_crt_client_kwargs['target_throughput'] = target_throughput
-    if multipart_chunksize:
-        create_crt_client_kwargs['part_size'] = multipart_chunksize
-
-    # TODO: How do we do this properly?
+    default_crt_throughput = 10.0
+    target_throughput = get_recommended_throughput_target_gbps()
+    create_crt_client_kwargs['target_throughput'] = target_throughput or default_crt_throughput
     create_crt_client_kwargs['botocore_credential_provider'] = cred_provider
 
     return create_s3_crt_client(**create_crt_client_kwargs)
@@ -95,7 +88,7 @@ def _create_crt_request_serializer(session, region_name):
         session,
         {
             'region_name': region_name,
-            'endpoint_url': None, # TODO: We don't have a way to get an endpoint_url
+            'endpoint_url': None
         }
     )
 
