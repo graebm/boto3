@@ -85,9 +85,13 @@ def _create_crt_client(session, config, region_name, cred_provider):
         'use_ssl': True,
     }
 
-    default_crt_throughput = 10.0
-    target_throughput = get_recommended_throughput_target_gbps()
-    create_crt_client_kwargs['target_throughput'] = target_throughput or default_crt_throughput
+    target_throughput_bytes = get_recommended_throughput_target_gbps()
+    if target_throughput_bytes is not None:
+        target_throughput_bytes = target_throughput_bytes * (1_000_000_000 / 8)
+    else:
+        target_throughput_bytes = 10_000_000_000 / 8
+
+    create_crt_client_kwargs['target_throughput'] = target_throughput_bytes
     create_crt_client_kwargs['botocore_credential_provider'] = cred_provider
 
     return create_s3_crt_client(**create_crt_client_kwargs)
