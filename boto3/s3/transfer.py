@@ -175,7 +175,6 @@ def create_transfer_manager(client, config, osutil=None):
             logger.debug(f"Using CRT client. pid: {getpid()}, thread: {threading.get_ident()}")
             return crt_transfer_manager._crt_s3_client
 
-    
     # If we don't resolve something above, fallback to the default.
     logger.debug(f"Using default client. pid: {getpid()}, thread: {threading.get_ident()}")
     return _create_default_transfer_manager(client, config, osutil)
@@ -295,6 +294,8 @@ class S3Transfer:
         else:
             self._manager = create_transfer_manager(client, config, osutil)
 
+        self._transfer_futures = []
+
     def upload_file(
         self, filename, bucket, key, callback=None, extra_args=None
     ):
@@ -316,6 +317,7 @@ class S3Transfer:
         future = self._manager.upload(
             filename, bucket, key, extra_args, subscribers
         )
+        self._transfer_futures.append(future)
         try:
             future.result()
         # If a client error was raised, add the backwards compatibility layer
@@ -350,6 +352,7 @@ class S3Transfer:
         future = self._manager.download(
             bucket, key, filename, extra_args, subscribers
         )
+        self._transfer_futures.append(future)
         try:
             future.result()
         # This is for backwards compatibility where when retries are
@@ -368,8 +371,23 @@ class S3Transfer:
     def __enter__(self):
         return self
 
-    def __exit__(self, *args):
-        self._manager.__exit__(*args)
+    def __exit__(self, exc_type, exc_value, *args):
+        if exc_type:
+            self._cancel_transfers()
+        self._wait_transfers_done()
+
+    def _cancel_transfers(self):
+        for future in self._transfer_futures:
+            if not future.done():
+                future.cancel()
+
+    def _wait_transfers_done(self):
+        for future in self._transfer_futures:
+            try:
+                future.result()
+            except Exception:
+                pass
+
 
 
 class ProgressCallbackInvoker(BaseSubscriber):
