@@ -7,6 +7,33 @@ from s3transfer.crt import (
 
 from botocore.session import Session
 
+# The default CRT 
+_CRT_S3_TRANSFER_MANAGER = None
+
+
+def _setup_crt_s3_transfer_manager(client, config, **kwargs):
+    try:
+        lock = CrossProcessLock('boto3')
+        lock.acquire()
+    except RuntimeError:
+        # If we're unable to acquire the lock, we cannot
+        # use the CRT in this process and should default to
+        # the default s3transfer manager.
+        return None
+
+    return CRTS3TransferManager(
+        create_crt_transfer_manager(client, config),
+        lock,
+        client.meta.region_name
+    )
+
+
+def get_crt_s3_transfer_manager(client, config):
+    global _CRT_S3_TRANSFER_MANAGER
+    if _CRT_S3_TRANSFER_MANAGER is None:
+        _CRT_S3_TRANSFER_MANAGER = _setup_crt_s3_transfer_manager(client, config)
+    return _CRT_S3_TRANSFER_MANAGER
+
 
 class CRTS3TransferManager:
 
@@ -33,23 +60,6 @@ class CRTCredentialWrapper:
 
     def load_credentials(self):
         return self._get_credentials()
-
-
-def initialize_crt_s3_transfer_manager(client, config):
-    try: 
-        lock = CrossProcessLock('boto3')
-        lock.acquire()
-    except RuntimeError:
-        # If we're unable to acquire the lock, we cannot
-        # use the CRT in this process and should default to
-        # the default s3transfer manager.
-        return None
-
-    return CRTS3TransferManager(
-        create_crt_transfer_manager(client, config),
-        lock,
-        client.meta.region_name
-    )
     
 
 def create_crt_transfer_manager(client, config):

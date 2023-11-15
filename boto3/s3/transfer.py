@@ -122,6 +122,8 @@ transfer.  For example:
 
 
 """
+import logging
+import threading
 from os import PathLike, fspath, getpid
 
 from botocore.compat import HAS_CRT
@@ -137,14 +139,15 @@ from s3transfer.subscribers import BaseSubscriber
 from s3transfer.utils import OSUtils
 
 from boto3.exceptions import RetriesExceededError, S3UploadFailedError
-from boto3 import _DEFAULT_CRT_CLIENT
 
 if HAS_CRT:
-    from boto3 import _get_default_crt_client
-    from boto3.crt import initialize_crt_s3_transfer_manager
+    from boto3.crt import get_crt_s3_transfer_manager
+    client_creation_lock = threading.Lock()
 
 KB = 1024
 MB = KB * KB
+
+logger = logging.getLogger(__name__)
 
 
 def create_transfer_manager(client, config, osutil=None):
@@ -163,15 +166,18 @@ def create_transfer_manager(client, config, osutil=None):
     :returns: A transfer manager based on parameters provided
     """
     if HAS_CRT:
-        crt_transfer_manager = _get_default_crt_client()
-        if crt_transfer_manager is None:
-            global _DEFAULT_CRT_CLIENT
-            _DEFAULT_CRT_CLIENT = initialize_crt_s3_transfer_manager(client, config)
-            crt_transfer_manager = _DEFAULT_CRT_CLIENT
-        if crt_transfer_manager is not None and client.meta.region_name == crt_transfer_manager._region:
+        with client_creation_lock:
+            crt_transfer_manager = get_crt_s3_transfer_manager(client, config)
+        if (
+            crt_transfer_manager is not None
+            and crt_transfer_manager._region == client.meta.region_name
+        ):
+            logger.debug(f"Using CRT client. pid: {getpid()}, thread: {threading.get_ident()}")
             return crt_transfer_manager._crt_s3_client
 
+    
     # If we don't resolve something above, fallback to the default.
+    logger.debug(f"Using default client. pid: {getpid()}, thread: {threading.get_ident()}")
     return _create_default_transfer_manager(client, config, osutil)
 
 
